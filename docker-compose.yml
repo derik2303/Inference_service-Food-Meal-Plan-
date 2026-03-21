@@ -1,0 +1,63 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    container_name: inference-api
+    env_file:
+      - .env.example
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./app:/app/app
+      - ./models:/models
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: inference-redis
+    ports:
+      - "6379:6379"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: inference-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: inference
+    ports:
+      - "5434:5434"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  worker:
+    build: .
+    container_name: inference-worker
+    env_file:
+      - .env.example
+    command: celery -A app.worker.celery_app.celery_app worker --loglevel=INFO
+    depends_on:
+      - redis
+    profiles: ["async"]
+
+  minio:
+    image: minio/minio:RELEASE.2024-07-26T20-48-21Z
+    container_name: inference-minio
+    profiles: ["storage"]
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+volumes:
+  pgdata:
+  miniodata:

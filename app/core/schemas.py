@@ -13,6 +13,10 @@ class PredictResponse(BaseModel):
     predictions: List[Prediction]
     dish_name: str | None = None
     calories_kcal: float | None = None
+    is_food: bool | None = None
+    food_probability: float | None = None
+    gate_threshold: float | None = None
+    gate_decision: str | None = None
     latency_ms: int
 
 

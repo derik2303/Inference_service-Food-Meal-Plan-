@@ -11,10 +11,7 @@ venv/
 .DS_Store
 
 # Model artifacts
-models/*.pt
-models/*.onnx
-models/*.ckpt
-models/*.bin
+models/
 
 # Local data
 *.sqlite3

@@ -126,7 +126,7 @@ _UI_HTML = """<!DOCTYPE html>
 
 @router.get("/healthz", response_model=HealthResponse)
 def healthz() -> HealthResponse:
-    loaded = bool(inference_service.bundle and inference_service.bundle.loaded)
+    loaded = inference_service.is_loaded()
     return HealthResponse(status="ok", model_loaded=loaded, model_version=settings.model_version)
 
 
@@ -171,6 +171,10 @@ async def predict(file: UploadFile = File(...)) -> PredictResponse:
     preds = result.get("predictions", [])
     dish_name = result.get("dish_name")
     calories_kcal = result.get("calories_kcal")
+    is_food = result.get("is_food")
+    food_probability = result.get("food_probability")
+    gate_threshold = result.get("gate_threshold")
+    gate_decision = result.get("gate_decision")
 
     if settings.enable_db:
         db = SessionLocal()
@@ -188,6 +192,10 @@ async def predict(file: UploadFile = File(...)) -> PredictResponse:
                     "predictions": preds,
                     "dish_name": dish_name,
                     "calories_kcal": calories_kcal,
+                    "is_food": is_food,
+                    "food_probability": food_probability,
+                    "gate_threshold": gate_threshold,
+                    "gate_decision": gate_decision,
                 },
             )
         finally:
@@ -202,6 +210,10 @@ async def predict(file: UploadFile = File(...)) -> PredictResponse:
         predictions=preds,
         dish_name=dish_name,
         calories_kcal=calories_kcal,
+        is_food=is_food,
+        food_probability=food_probability,
+        gate_threshold=gate_threshold,
+        gate_decision=gate_decision,
         latency_ms=latency_ms,
     )
 

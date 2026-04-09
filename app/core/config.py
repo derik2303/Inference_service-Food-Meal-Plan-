@@ -27,6 +27,16 @@ def _get_list(name: str, default: List[str]) -> List[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _get_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str
@@ -47,6 +57,11 @@ class Settings:
     class_labels: List[str]
     classes_path: str
     warmup: bool
+
+    dish_model_path: str
+    calorie_model_path: str
+    gate_model_path: str
+    gate_threshold: float
 
     enable_db: bool
     database_url: str
@@ -83,6 +98,10 @@ class Settings:
             class_labels=_get_list("CLASS_LABELS", ["classA"]),
             classes_path=os.getenv("CLASSES_PATH", "/models/classes.json"),
             warmup=_get_bool("WARMUP", True),
+            dish_model_path=os.getenv("DISH_MODEL_PATH", "/models/best_food101_efficientnet_dish.pth"),
+            calorie_model_path=os.getenv("CALORIE_MODEL_PATH", "/models/best_regressor_efficientnetb0_fulltrain.pth"),
+            gate_model_path=os.getenv("GATE_MODEL_PATH", "/models/best_gate_food_model.pth"),
+            gate_threshold=_get_float("GATE_THRESHOLD", 0.5),
             enable_db=_get_bool("ENABLE_DB", False),
             database_url=os.getenv(
                 "DATABASE_URL",

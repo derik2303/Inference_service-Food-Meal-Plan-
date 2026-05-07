@@ -6,30 +6,41 @@ services:
     container_name: inference-api
     env_file:
       - .env.example
+    environment:
+      ENABLE_DB: "false"
+      ENABLE_ASYNC: "false"
+      ENABLE_S3: "false"
+      WORKERS: "1"
+      DEVICE: "cpu"
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
+      MALLOC_ARENA_MAX: "2"
     ports:
       - "8000:8000"
-    depends_on:
-      - postgres
-      - redis
     volumes:
       - ./app:/app/app
-      - ./models:/models
+      - ./models:/models:ro
+    restart: unless-stopped
 
   redis:
     image: redis:7.2-alpine
     container_name: inference-redis
+    profiles: ["async"]
     ports:
       - "6379:6379"
 
   postgres:
     image: postgres:16-alpine
     container_name: inference-postgres
+    profiles: ["db"]
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: inference
     ports:
-      - "5434:5434"
+      - "5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -39,6 +50,14 @@ services:
     container_name: inference-worker
     env_file:
       - .env.example
+    environment:
+      ENABLE_ASYNC: "true"
+      REDIS_URL: "redis://redis:6379/0"
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
+      MALLOC_ARENA_MAX: "2"
     command: celery -A app.worker.celery_app.celery_app worker --loglevel=INFO
     depends_on:
       - redis

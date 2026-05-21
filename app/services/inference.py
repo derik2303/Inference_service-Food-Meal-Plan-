@@ -163,7 +163,7 @@ class InferenceService:
 
             gate_cfg = gate_ckpt.get("cfg") or {}
             dropout = float(gate_cfg.get("DROPOUT", 0.25))
-            self.gate_threshold = float(gate_ckpt.get("best_threshold", settings.gate_threshold))
+            self.gate_threshold = settings.gate_threshold
 
             self.gate_model = EfficientNetB0Gate(dropout=dropout).to(self.device)
             self.gate_model.load_state_dict(gate_ckpt["model_state"], strict=True)

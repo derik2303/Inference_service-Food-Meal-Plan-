@@ -43,24 +43,49 @@ _UI_HTML = """<!DOCTYPE html>
         color: #1f1f1f;
       }
       .card {
-        max-width: 680px;
+        max-width: 760px;
         margin: 0 auto;
         background: #ffffff;
         border: 1px solid #e6e6e3;
-        border-radius: 12px;
+        border-radius: 8px;
         padding: 20px;
         box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06);
       }
-      h1 { margin: 0 0 12px; font-size: 22px; }
-      .row { display: flex; gap: 12px; align-items: center; }
-      input[type="file"] { flex: 1; }
+      h1 { margin: 0 0 16px; font-size: 22px; }
+      .camera-wrap {
+        background: #111827;
+        border-radius: 8px;
+        overflow: hidden;
+        aspect-ratio: 4 / 3;
+        display: grid;
+        place-items: center;
+      }
+      video,
+      canvas {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      canvas { display: none; }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 12px;
+      }
       button {
         background: #1f6feb;
         color: #fff;
         border: 0;
         padding: 10px 14px;
-        border-radius: 8px;
+        border-radius: 6px;
         cursor: pointer;
+        font-size: 14px;
+      }
+      button.secondary { background: #374151; }
+      button:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
       }
       pre {
         background: #0f172a;
@@ -70,44 +95,106 @@ _UI_HTML = """<!DOCTYPE html>
         overflow-x: auto;
       }
       .status { font-size: 13px; color: #555; margin-top: 8px; }
-      img { max-width: 100%; border-radius: 8px; margin-top: 12px; }
+      h3 { margin-top: 22px; }
     </style>
   </head>
   <body>
     <div class="card">
       <h1>Image Inference</h1>
-      <div class="row">
-        <input id="file" type="file" accept="image/*" />
-        <button id="btn">Predict</button>
+      <div class="camera-wrap">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas"></canvas>
+      </div>
+      <div class="controls">
+        <button id="startBtn">Start camera</button>
+        <button id="captureBtn" class="secondary" disabled>Capture</button>
+        <button id="retakeBtn" class="secondary" disabled>Retake</button>
+        <button id="predictBtn" disabled>Predict</button>
       </div>
       <div class="status" id="status"></div>
-      <img id="preview" alt="" />
       <h3>Response</h3>
       <pre id="out">Waiting...</pre>
     </div>
     <script>
-      const btn = document.getElementById("btn");
-      const fileInput = document.getElementById("file");
+      const startBtn = document.getElementById("startBtn");
+      const captureBtn = document.getElementById("captureBtn");
+      const retakeBtn = document.getElementById("retakeBtn");
+      const predictBtn = document.getElementById("predictBtn");
+      const video = document.getElementById("video");
+      const canvas = document.getElementById("canvas");
       const out = document.getElementById("out");
       const statusEl = document.getElementById("status");
-      const preview = document.getElementById("preview");
+      const ctx = canvas.getContext("2d");
 
-      fileInput.addEventListener("change", () => {
-        const file = fileInput.files[0];
-        if (!file) return;
-        const url = URL.createObjectURL(file);
-        preview.src = url;
-      });
+      let stream = null;
+      let capturedBlob = null;
 
-      btn.addEventListener("click", async () => {
-        const file = fileInput.files[0];
-        if (!file) {
-          statusEl.textContent = "Please choose an image first.";
+      async function startCamera() {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" },
+            audio: false
+          });
+          video.srcObject = stream;
+          video.style.display = "block";
+          canvas.style.display = "none";
+          capturedBlob = null;
+          captureBtn.disabled = false;
+          retakeBtn.disabled = true;
+          predictBtn.disabled = true;
+          statusEl.textContent = "Camera ready.";
+        } catch (err) {
+          statusEl.textContent = "Cannot access camera. Please allow camera permission.";
+          out.textContent = String(err);
+        }
+      }
+
+      function captureFrame() {
+        if (!video.videoWidth || !video.videoHeight) {
+          statusEl.textContent = "Camera is not ready yet.";
           return;
         }
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            statusEl.textContent = "Could not capture image.";
+            return;
+          }
+          capturedBlob = blob;
+          video.style.display = "none";
+          canvas.style.display = "block";
+          captureBtn.disabled = true;
+          retakeBtn.disabled = false;
+          predictBtn.disabled = false;
+          statusEl.textContent = "Image captured.";
+        }, "image/jpeg", 0.92);
+      }
+
+      function retake() {
+        capturedBlob = null;
+        video.style.display = "block";
+        canvas.style.display = "none";
+        captureBtn.disabled = false;
+        retakeBtn.disabled = true;
+        predictBtn.disabled = true;
+        statusEl.textContent = "Camera ready.";
+      }
+
+      async function predictCapturedImage() {
+        if (!capturedBlob) {
+          statusEl.textContent = "Please capture an image first.";
+          return;
+        }
+
         statusEl.textContent = "Uploading...";
+        predictBtn.disabled = true;
         const form = new FormData();
-        form.append("file", file);
+        form.append("file", capturedBlob, "webcam-capture.jpg");
+
         try {
           const res = await fetch("/predict", { method: "POST", body: form });
           const data = await res.json();
@@ -116,7 +203,26 @@ _UI_HTML = """<!DOCTYPE html>
         } catch (err) {
           statusEl.textContent = "Request failed.";
           out.textContent = String(err);
+        } finally {
+          predictBtn.disabled = false;
         }
+      }
+
+      startBtn.addEventListener("click", startCamera);
+      captureBtn.addEventListener("click", captureFrame);
+      retakeBtn.addEventListener("click", retake);
+      predictBtn.addEventListener("click", predictCapturedImage);
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        startBtn.disabled = true;
+        statusEl.textContent = "Camera API is not supported in this browser.";
+      } else {
+        startCamera();
+      }
+
+      window.addEventListener("beforeunload", () => {
+        if (!stream) return;
+        stream.getTracks().forEach((track) => track.stop());
       });
     </script>
   </body>

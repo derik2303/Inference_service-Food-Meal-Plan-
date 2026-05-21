@@ -4,7 +4,6 @@ import time
 from fastapi import APIRouter, File, UploadFile, HTTPException
 from fastapi.responses import Response, HTMLResponse
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-from celery.result import AsyncResult
 
 from app.core.config import settings
 from app.core.metrics import REQUEST_COUNT, REQUEST_LATENCY
@@ -17,10 +16,6 @@ from app.core.schemas import (
 from app.core.logging import get_request_id
 from app.core.utils import new_request_id, validate_upload, check_bytes_limit
 from app.services.inference import inference_service
-from app.storage.s3 import S3Client
-from app.db.session import SessionLocal
-from app.db.repository import create_inference_record
-from app.worker.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
@@ -261,6 +256,8 @@ async def predict(file: UploadFile = File(...)) -> PredictResponse:
 
     input_path = None
     if settings.enable_s3:
+        from app.storage.s3 import S3Client
+
         s3 = S3Client()
         input_path = s3.upload_bytes(raw, file.content_type) or None
 
@@ -283,6 +280,9 @@ async def predict(file: UploadFile = File(...)) -> PredictResponse:
     gate_decision = result.get("gate_decision")
 
     if settings.enable_db:
+        from app.db.repository import create_inference_record
+        from app.db.session import SessionLocal
+
         db = SessionLocal()
         try:
             create_inference_record(
@@ -337,6 +337,8 @@ async def predict_async(file: UploadFile = File(...)) -> AsyncPredictResponse:
     raw = await file.read()
     check_bytes_limit(raw, settings.max_upload_bytes)
 
+    from app.worker.celery_app import celery_app
+
     payload = {"request_id": request_id, "image_b64": base64.b64encode(raw).decode("utf-8")}
     job = celery_app.send_task("predict_image", args=[payload])
 
@@ -349,6 +351,10 @@ async def predict_async(file: UploadFile = File(...)) -> AsyncPredictResponse:
 def job_status(job_id: str) -> JobStatusResponse:
     if not settings.enable_async:
         raise HTTPException(status_code=503, detail="Async mode disabled")
+
+    from celery.result import AsyncResult
+
+    from app.worker.celery_app import celery_app
 
     result = AsyncResult(job_id, app=celery_app)
     payload = result.result if result.successful() else None
